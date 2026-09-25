@@ -10,9 +10,11 @@ router = APIRouter()
 
 SUPPORTED_EXTENSIONS = {
     ".pdf", ".txt", ".md", ".csv", ".tsv", ".json", ".log",
+    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".svg",
     ".mp3", ".wav", ".m4a", ".ogg", ".aac", ".flac", ".wma",
     ".mp4", ".webm", ".mov", ".mkv", ".avi"
 }
+
 
 @router.post("/upload")
 async def upload_documents(

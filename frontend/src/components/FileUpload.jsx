@@ -1,11 +1,11 @@
 import { useState, useRef } from 'react'
 import './FileUpload.css'
 
-const ACCEPTED_EXTENSIONS = ".pdf,.txt,.md,.csv,.tsv,.json,.mp3,.wav,.m4a,.ogg,.aac,.flac,.mp4,.webm,.mov"
+const ACCEPTED_EXTENSIONS = ".pdf,.txt,.md,.csv,.tsv,.json,.png,.jpg,.jpeg,.webp,.gif,.bmp,.svg,.mp3,.wav,.m4a,.ogg,.aac,.flac,.mp4,.webm,.mov"
 
 export default function FileUpload({ onUpload }) {
   const [dragging, setDragging] = useState(false)
-  const [status, setStatus]     = useState(null)  // { type: 'ok'|'err', msg }
+  const [status, setStatus]     = useState(null)  // { type: 'ok'|'err'|'info', msg }
   const [loading, setLoading]   = useState(false)
   const [fileCount, setFileCount] = useState(0)
   const inputRef = useRef()
@@ -15,7 +15,7 @@ export default function FileUpload({ onUpload }) {
     const files = Array.from(fileList)
     setLoading(true)
     setFileCount(files.length)
-    setStatus({ type: 'info', msg: `Processing ${files.length} file(s)...` })
+    setStatus({ type: 'info', msg: `[PROCESSING] Ingesting & embedding ${files.length} file(s)...` })
 
     const form = new FormData()
     files.forEach((f) => {
@@ -36,7 +36,7 @@ export default function FileUpload({ onUpload }) {
       const successCount = (data.files || []).filter(f => f.status === 'success').length
       setStatus({
         type: 'ok',
-        msg: `Indexed ${data.total_chunks || data.chunks || 0} chunks from ${successCount} file(s)`,
+        msg: `[SYNCHRONIZED] ${data.total_chunks || data.chunks || 0} vectors created from ${successCount} file(s)`,
       })
       if (data.files && data.files.length > 0) {
         onUpload(data.files)
@@ -44,7 +44,7 @@ export default function FileUpload({ onUpload }) {
         onUpload([{ filename: files[0].name, chunks: data.chunks || 0, status: 'success', file_type: 'document' }])
       }
     } catch (e) {
-      setStatus({ type: 'err', msg: e.message })
+      setStatus({ type: 'err', msg: `[ERROR] ${e.message}` })
     } finally {
       setLoading(false)
       if (inputRef.current) inputRef.current.value = ''
@@ -61,7 +61,11 @@ export default function FileUpload({ onUpload }) {
 
   return (
     <div className="upload-section">
-      <h2>Upload Documents & Media</h2>
+      <div className="section-title-bar">
+        <span className="terminal-prompt">//</span>
+        <h2>DATA INGESTION</h2>
+        <span className="tech-badge">MULTIMODAL</span>
+      </div>
 
       <div
         className={`drop-zone${dragging ? ' dragging' : ''}${loading ? ' loading' : ''}`}
@@ -70,18 +74,22 @@ export default function FileUpload({ onUpload }) {
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
       >
-        <span className="icon">{loading ? '⏳' : '📁'}</span>
+        <div className="drop-zone-glow"></div>
+        <div className="drop-icon-container">
+          <span className="icon">{loading ? '⚡' : '📥'}</span>
+        </div>
         <p className="main-text">
           {loading
-            ? `Transcribing & Indexing (${fileCount} files)...`
-            : 'Drop files here or click to browse'}
+            ? `Transcribing & Vectorizing (${fileCount} files)...`
+            : 'Drop files to vectorize or browse'}
         </p>
-        <p className="format-tags">
-          <span>📄 PDF / TXT</span>
-          <span>📊 CSV / MD</span>
-          <span>🎵 Audio</span>
-          <span>🎬 Video</span>
-        </p>
+        <div className="format-tags">
+          <span className="tag-pdf">📄 PDF</span>
+          <span className="tag-img">🖼️ IMG</span>
+          <span className="tag-aud">🎵 AUD</span>
+          <span className="tag-vid">🎬 VID</span>
+          <span className="tag-txt">📊 CSV/TXT</span>
+        </div>
         <input
           ref={inputRef}
           type="file"
@@ -94,10 +102,12 @@ export default function FileUpload({ onUpload }) {
 
       {status && (
         <div className={`status ${status.type}`}>
-          {status.msg}
+          <span className="status-dot"></span>
+          <span>{status.msg}</span>
         </div>
       )}
     </div>
   )
 }
+
 

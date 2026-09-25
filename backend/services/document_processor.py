@@ -10,6 +10,7 @@ OVERLAP = 50       # words overlap between chunks
 
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".aac", ".flac", ".wma", ".opus"}
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v"}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".svg"}
 DOCUMENT_EXTENSIONS = {".pdf", ".txt", ".md", ".csv", ".tsv", ".json", ".log"}
 
 def get_file_info(filename: str, content_type: str = "") -> dict:
@@ -18,6 +19,9 @@ def get_file_info(filename: str, content_type: str = "") -> dict:
 
     if ext == ".pdf" or "pdf" in mime:
         return {"category": "pdf", "mime": "application/pdf"}
+    elif ext in IMAGE_EXTENSIONS or mime.startswith("image/"):
+        guessed_mime = mimetypes.guess_type(filename)[0] or "image/png"
+        return {"category": "image", "mime": mime if mime.startswith("image/") else guessed_mime}
     elif ext in AUDIO_EXTENSIONS or mime.startswith("audio/"):
         guessed_mime = mimetypes.guess_type(filename)[0] or "audio/mp3"
         return {"category": "audio", "mime": mime if mime.startswith("audio/") else guessed_mime}
@@ -76,6 +80,36 @@ def _process_pdf(content: bytes, filename: str) -> str:
 
     return text
 
+def _process_image(content: bytes, filename: str, mime_type: str) -> str:
+    try:
+        from services.embeddings import _get_client
+        from google.genai import types
+
+        client = _get_client()
+        prompt = (
+            f"You are analyzing an image file named '{filename}'. "
+            "Please provide a comprehensive, precise description and transcription of all visible contents. "
+            "Transcribe verbatim all text, numbers, diagram labels, charts, code, or user interface elements. "
+            "Describe key visual features, subjects, and context in detail to enable rich semantic search."
+        )
+
+        # Standardize SVG or unsupported direct image formats
+        normalized_mime = mime_type if mime_type in {"image/png", "image/jpeg", "image/webp", "image/gif"} else "image/png"
+
+        response = client.models.generate_content(
+            model="gemini-flash-latest",
+            contents=[
+                types.Part.from_bytes(data=content, mime_type=normalized_mime),
+                prompt,
+            ],
+        )
+        if response and response.text:
+            return response.text.strip()
+    except Exception as e:
+        logger.error(f"Gemini image processing failed for {filename}: {e}")
+
+    return ""
+
 def _process_audio_or_video(content: bytes, filename: str, mime_type: str, category: str) -> str:
     try:
         from services.embeddings import _get_client
@@ -122,6 +156,8 @@ def process_document(content: bytes, filename: str, content_type: str = "") -> l
         text = _process_pdf(content, filename)
     elif category in {"audio", "video"}:
         text = _process_audio_or_video(content, filename, mime, category)
+    elif category == "image":
+        text = _process_image(content, filename, mime)
     else:
         text = content.decode("utf-8", errors="replace")
 
@@ -139,5 +175,6 @@ def process_document(content: bytes, filename: str, content_type: str = "") -> l
         for i, chunk in enumerate(chunks)
         if chunk.strip()
     ]
+
 
 
