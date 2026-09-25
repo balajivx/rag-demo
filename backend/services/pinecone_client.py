@@ -2,6 +2,22 @@ import os
 from pinecone import Pinecone
 from services.embeddings import get_embedding
 
+import hashlib
+import unicodedata
+import re
+
+def _sanitize_vector_id(filename: str, chunk_index: int) -> str:
+    # Normalize unicode to ASCII
+    normalized = unicodedata.normalize('NFKD', filename)
+    ascii_clean = normalized.encode('ascii', 'ignore').decode('ascii')
+    safe_name = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', ascii_clean).strip('_')
+    if not safe_name:
+        safe_name = "doc"
+    if len(safe_name) > 80:
+        safe_name = safe_name[:80]
+    raw_hash = hashlib.md5(filename.encode("utf-8", errors="ignore")).hexdigest()[:8]
+    return f"{safe_name}_{raw_hash}__{chunk_index}"
+
 def _index():
     pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
     return pc.Index(os.getenv("PINECONE_INDEX_NAME", "rag-demo"))
@@ -11,8 +27,9 @@ def upsert_chunks(chunks: list[dict], filename: str):
     vectors = []
     for chunk in chunks:
         embedding = get_embedding(chunk["text"])
+        vector_id = _sanitize_vector_id(filename, chunk["index"])
         vectors.append({
-            "id": f"{filename}__{chunk['index']}",
+            "id": vector_id,
             "values": embedding,
             "metadata": {
                 "text": chunk["text"],
