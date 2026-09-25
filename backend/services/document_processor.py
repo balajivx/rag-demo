@@ -1,7 +1,9 @@
 import io
+import time
 import mimetypes
 import logging
 from pypdf import PdfReader
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +12,7 @@ OVERLAP = 50       # words overlap between chunks
 
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".aac", ".flac", ".wma", ".opus"}
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v"}
-IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".svg"}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".svg", ".heic", ".heif", ".ico"}
 DOCUMENT_EXTENSIONS = {".pdf", ".txt", ".md", ".csv", ".tsv", ".json", ".log"}
 
 def get_file_info(filename: str, content_type: str = "") -> dict:
@@ -35,29 +37,38 @@ def get_file_info(filename: str, content_type: str = "") -> dict:
     else:
         return {"category": "text", "mime": "text/plain"}
 
-PRIMARY_MODELS = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-flash-latest"]
+PRIMARY_MODELS = [
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+]
 
-def _generate_multimodal_content(parts: list, prompt: str) -> str:
+def _generate_multimodal_content(parts: list, prompt: str, max_retries: int = 3) -> str:
     from services.embeddings import _get_client
     client = _get_client()
-
     contents = parts + [prompt]
     last_error = None
 
-    for model_name in PRIMARY_MODELS:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=contents,
-            )
-            if response and response.text:
-                return response.text.strip()
-        except Exception as e:
-            last_error = e
-            logger.warning(f"Model {model_name} failed: {e}. Trying fallback...")
+    for attempt in range(max_retries):
+        for model_name in PRIMARY_MODELS:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=contents,
+                )
+                if response and response.text:
+                    return response.text.strip()
+            except Exception as e:
+                last_error = e
+                logger.warning(f"[Attempt {attempt+1}] Model {model_name} failed: {e}. Trying fallback...")
+        if attempt < max_retries - 1:
+            time.sleep(1.2)
 
     if last_error:
-        logger.error(f"All multimodal models failed: {last_error}")
+        logger.error(f"All multimodal models and retries failed: {last_error}")
     return ""
 
 def _process_pdf(content: bytes, filename: str) -> str:
@@ -97,6 +108,23 @@ def _process_pdf(content: bytes, filename: str) -> str:
 
     return text
 
+def _normalize_image(content: bytes) -> tuple[bytes, str]:
+    try:
+        pil_img = Image.open(io.BytesIO(content))
+        if pil_img.mode in ("RGBA", "P", "LA"):
+            pil_img = pil_img.convert("RGB")
+        elif pil_img.mode != "RGB":
+            pil_img = pil_img.convert("RGB")
+
+        # Resize if overly large for fast processing & token optimization
+        pil_img.thumbnail((1800, 1800))
+        out_buf = io.BytesIO()
+        pil_img.save(out_buf, format="JPEG", quality=88, optimize=True)
+        return out_buf.getvalue(), "image/jpeg"
+    except Exception as e:
+        logger.warning(f"Image normalization failed, using raw bytes: {e}")
+        return content, "image/png"
+
 def _process_image(content: bytes, filename: str, mime_type: str) -> str:
     try:
         from google.genai import types
@@ -104,23 +132,12 @@ def _process_image(content: bytes, filename: str, mime_type: str) -> str:
         prompt = (
             f"You are analyzing an image file named '{filename}'. "
             "Please provide a comprehensive, precise description and transcription of all visible contents. "
-            "Transcribe verbatim all text, numbers, diagram labels, charts, code, or user interface elements. "
+            "Transcribe verbatim all text, numbers, diagram labels, charts, tables, code, or user interface elements. "
             "Describe key visual features, subjects, and context in detail to enable rich semantic search."
         )
 
-        normalized_mime = mime_type.lower()
-        if "png" in normalized_mime:
-            normalized_mime = "image/png"
-        elif "jp" in normalized_mime:  # jpeg, jpg
-            normalized_mime = "image/jpeg"
-        elif "webp" in normalized_mime:
-            normalized_mime = "image/webp"
-        elif "gif" in normalized_mime:
-            normalized_mime = "image/gif"
-        else:
-            normalized_mime = "image/png"
-
-        part = types.Part.from_bytes(data=content, mime_type=normalized_mime)
+        clean_bytes, normalized_mime = _normalize_image(content)
+        part = types.Part.from_bytes(data=clean_bytes, mime_type=normalized_mime)
         return _generate_multimodal_content([part], prompt)
     except Exception as e:
         logger.error(f"Gemini image processing failed for {filename}: {e}")
@@ -145,6 +162,7 @@ def _process_audio_or_video(content: bytes, filename: str, mime_type: str, categ
         logger.error(f"Gemini {category} processing failed for {filename}: {e}")
 
     return ""
+
 
 
 def _chunk_text(text: str) -> list[str]:

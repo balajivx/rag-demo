@@ -30,6 +30,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(upload.router, prefix="/api")
 app.include_router(query.router, prefix="/api")
+app.include_router(upload.router)
+app.include_router(query.router)
 
 @app.get("/")
 def health():

@@ -10,7 +10,7 @@ router = APIRouter()
 
 SUPPORTED_EXTENSIONS = {
     ".pdf", ".txt", ".md", ".csv", ".tsv", ".json", ".log",
-    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".svg",
+    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".svg", ".heic", ".heif", ".ico",
     ".mp3", ".wav", ".m4a", ".ogg", ".aac", ".flac", ".wma",
     ".mp4", ".webm", ".mov", ".mkv", ".avi"
 }
