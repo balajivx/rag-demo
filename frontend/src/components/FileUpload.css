@@ -1,35 +1,96 @@
 .upload-section h2 {
   font-size: 14px;
-  font-weight: 600;
-  color: #111827;
-  margin-bottom: 10px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .drop-zone {
-  border: 2px dashed #d1d5db;
-  border-radius: 10px;
-  padding: 24px 12px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 20px 12px;
   text-align: center;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  background: #f8fafc;
+  transition: all 0.2s ease-in-out;
 }
 
-.drop-zone:hover,
-.drop-zone.dragging {
+.drop-zone:hover {
   border-color: #6366f1;
   background: #eef2ff;
+  transform: translateY(-1px);
 }
 
-.drop-zone .icon { font-size: 30px; display: block; margin-bottom: 8px; }
-.drop-zone p     { font-size: 13px; color: #4b5563; }
-.drop-zone .hint { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+.drop-zone.dragging {
+  border-color: #4f46e5;
+  background: #e0e7ff;
+  transform: scale(1.02);
+}
+
+.drop-zone.loading {
+  cursor: wait;
+  border-color: #a5b4fc;
+  background: #faf5ff;
+}
+
+.drop-zone .icon {
+  font-size: 32px;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.drop-zone .main-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.drop-zone .format-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.drop-zone .format-tags span {
+  font-size: 10px;
+  font-weight: 500;
+  background: #e2e8f0;
+  color: #475569;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
 
 .status {
-  margin-top: 10px;
+  margin-top: 12px;
   font-size: 12px;
-  padding: 8px 10px;
-  border-radius: 6px;
+  font-weight: 500;
+  padding: 10px 12px;
+  border-radius: 8px;
+  line-height: 1.4;
+  word-break: break-word;
 }
 
-.status.ok  { background: #d1fae5; color: #065f46; }
-.status.err { background: #fee2e2; color: #991b1b; }
+.status.ok {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.status.err {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.status.info {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+

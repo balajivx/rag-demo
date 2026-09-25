@@ -12,11 +12,13 @@ app = FastAPI(title="RAG Demo API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"] + ([os.getenv("FRONTEND_URL")] if os.getenv("FRONTEND_URL") else []),
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
