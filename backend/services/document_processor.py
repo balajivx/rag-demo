@@ -35,6 +35,31 @@ def get_file_info(filename: str, content_type: str = "") -> dict:
     else:
         return {"category": "text", "mime": "text/plain"}
 
+PRIMARY_MODELS = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-flash-latest"]
+
+def _generate_multimodal_content(parts: list, prompt: str) -> str:
+    from services.embeddings import _get_client
+    client = _get_client()
+
+    contents = parts + [prompt]
+    last_error = None
+
+    for model_name in PRIMARY_MODELS:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=contents,
+            )
+            if response and response.text:
+                return response.text.strip()
+        except Exception as e:
+            last_error = e
+            logger.warning(f"Model {model_name} failed: {e}. Trying fallback...")
+
+    if last_error:
+        logger.error(f"All multimodal models failed: {last_error}")
+    return ""
+
 def _process_pdf(content: bytes, filename: str) -> str:
     text = ""
     try:
@@ -63,18 +88,10 @@ def _process_pdf(content: bytes, filename: str) -> str:
     # Fallback to Gemini multimodal OCR if pypdf could not extract text (e.g. scanned/image PDF)
     if not text.strip():
         try:
-            from services.embeddings import _get_client
             from google.genai import types
-            client = _get_client()
-            response = client.models.generate_content(
-                model="gemini-flash-latest",
-                contents=[
-                    types.Part.from_bytes(data=content, mime_type="application/pdf"),
-                    "Extract and transcribe all text, tables, and data from this document accurately. Output only the extracted text.",
-                ],
-            )
-            if response and response.text:
-                text = response.text.strip()
+            prompt = "Extract and transcribe all text, tables, and data from this document accurately. Output only the extracted text."
+            part = types.Part.from_bytes(data=content, mime_type="application/pdf")
+            text = _generate_multimodal_content([part], prompt)
         except Exception as e:
             logger.error(f"Gemini PDF OCR fallback failed for {filename}: {e}")
 
@@ -82,10 +99,8 @@ def _process_pdf(content: bytes, filename: str) -> str:
 
 def _process_image(content: bytes, filename: str, mime_type: str) -> str:
     try:
-        from services.embeddings import _get_client
         from google.genai import types
 
-        client = _get_client()
         prompt = (
             f"You are analyzing an image file named '{filename}'. "
             "Please provide a comprehensive, precise description and transcription of all visible contents. "
@@ -93,18 +108,20 @@ def _process_image(content: bytes, filename: str, mime_type: str) -> str:
             "Describe key visual features, subjects, and context in detail to enable rich semantic search."
         )
 
-        # Standardize SVG or unsupported direct image formats
-        normalized_mime = mime_type if mime_type in {"image/png", "image/jpeg", "image/webp", "image/gif"} else "image/png"
+        normalized_mime = mime_type.lower()
+        if "png" in normalized_mime:
+            normalized_mime = "image/png"
+        elif "jp" in normalized_mime:  # jpeg, jpg
+            normalized_mime = "image/jpeg"
+        elif "webp" in normalized_mime:
+            normalized_mime = "image/webp"
+        elif "gif" in normalized_mime:
+            normalized_mime = "image/gif"
+        else:
+            normalized_mime = "image/png"
 
-        response = client.models.generate_content(
-            model="gemini-flash-latest",
-            contents=[
-                types.Part.from_bytes(data=content, mime_type=normalized_mime),
-                prompt,
-            ],
-        )
-        if response and response.text:
-            return response.text.strip()
+        part = types.Part.from_bytes(data=content, mime_type=normalized_mime)
+        return _generate_multimodal_content([part], prompt)
     except Exception as e:
         logger.error(f"Gemini image processing failed for {filename}: {e}")
 
@@ -112,10 +129,8 @@ def _process_image(content: bytes, filename: str, mime_type: str) -> str:
 
 def _process_audio_or_video(content: bytes, filename: str, mime_type: str, category: str) -> str:
     try:
-        from services.embeddings import _get_client
         from google.genai import types
 
-        client = _get_client()
         prompt = (
             f"You are processing a {category} file named '{filename}'. "
             "Please provide a complete, detailed, and accurate transcription of all spoken dialogue, "
@@ -124,19 +139,13 @@ def _process_audio_or_video(content: bytes, filename: str, mime_type: str, categ
             "Output the transcription and summary clearly."
         )
 
-        response = client.models.generate_content(
-            model="gemini-flash-latest",
-            contents=[
-                types.Part.from_bytes(data=content, mime_type=mime_type),
-                prompt,
-            ],
-        )
-        if response and response.text:
-            return response.text.strip()
+        part = types.Part.from_bytes(data=content, mime_type=mime_type)
+        return _generate_multimodal_content([part], prompt)
     except Exception as e:
         logger.error(f"Gemini {category} processing failed for {filename}: {e}")
 
     return ""
+
 
 def _chunk_text(text: str) -> list[str]:
     words = text.split()
